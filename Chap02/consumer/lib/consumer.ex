@@ -4,6 +4,8 @@ defmodule Consumer do
   """
 
   use GenServer
+  require Logger
+  alias :jsx, as: JSX
   @queue "test_queue"
   @limit 10
 
@@ -32,7 +34,7 @@ defmodule Consumer do
     {:ok, chan} = AMQP.Channel.open(conn)
 
     # The current process becomes the de facto consumer
-    # Of all incoming from the queue.
+    # Of all incoming messages from the queue.
     {:ok, tag} = AMQP.Basic.consume(chan, @queue, self())
     {:noreply, %{tag: tag, chan: chan, count: 0, conn: conn}}
   end
@@ -45,8 +47,9 @@ defmodule Consumer do
     {:noreply, state}
   end
 
-  def handle_info({:basic_deliver, _payload, headers}, state)
+  def handle_info({:basic_deliver, payload, headers}, state)
       when state.count < @limit do
+    Logger.info("Payload consumer: #{inspect(JSX.decode(payload))}")
     AMQP.Basic.ack(state.chan, headers.delivery_tag)
     {:noreply, Map.update(state, :count, 0, &(&1 + 1))}
   end
@@ -58,7 +61,7 @@ defmodule Consumer do
   end
 
   def handle_info(info, state) do
-    IO.puts("#{inspect(info)}")
+    Logger.info("Unknown info: #{inspect(info)}")
     {:noreply, state}
   end
 
